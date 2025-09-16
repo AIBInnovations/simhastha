@@ -1,96 +1,251 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
 const CrowdHeatMap = ({ onNavigate }) => {
   const [selectedLocation, setSelectedLocation] = useState(null)
   const [filterType, setFilterType] = useState('all')
   const [timeRange, setTimeRange] = useState('now')
+  const [viewMode, setViewMode] = useState('heatmap') // 'heatmap' or 'list'
+  const [showAlertModal, setShowAlertModal] = useState(false)
+  const [alertLocation, setAlertLocation] = useState('')
+  const mapRef = useRef(null)
+  const mapInstance = useRef(null)
+
+  const API_KEY = 'AIzaSyCDZ7DMMqlyhtg9Dqodo926E5ZfU0NuqH4'
 
   const locations = [
     {
       id: 1,
       name: 'Har Ki Pauri',
       crowd: 'low',
-      coordinates: { x: 60, y: 40 },
+      coordinates: { x: 60, y: 40, lat: 29.9557, lng: 78.1642 },
       capacity: '85%',
       waitTime: '5 mins',
       type: 'ghat',
       facilities: ['washroom', 'water', 'medical'],
       peakHours: ['6:00 AM', '7:00 PM'],
-      description: 'Main ghat for Ganga Aarti'
+      description: 'Main ghat for Ganga Aarti',
+      currentVisitors: 850,
+      maxCapacity: 1000,
+      trend: 'increasing',
+      averageStayTime: '45 mins'
     },
     {
       id: 2,
       name: 'Triveni Sangam',
       crowd: 'high',
-      coordinates: { x: 45, y: 60 },
+      coordinates: { x: 45, y: 60, lat: 25.4358, lng: 81.8463 },
       capacity: '95%',
       waitTime: '25 mins',
       type: 'ghat',
       facilities: ['washroom', 'water'],
       peakHours: ['5:00 AM', '8:00 PM'],
-      description: 'Holy confluence of three rivers'
+      description: 'Holy confluence of three rivers',
+      currentVisitors: 2850,
+      maxCapacity: 3000,
+      trend: 'stable',
+      averageStayTime: '90 mins'
     },
     {
       id: 3,
       name: 'Ram Ghat',
       crowd: 'moderate',
-      coordinates: { x: 70, y: 30 },
+      coordinates: { x: 70, y: 30, lat: 29.9620, lng: 78.1025 },
       capacity: '60%',
       waitTime: '10 mins',
       type: 'ghat',
       facilities: ['washroom', 'water', 'parking'],
       peakHours: ['7:00 AM', '6:00 PM'],
-      description: 'Peaceful ghat for prayers'
+      description: 'Peaceful ghat for prayers',
+      currentVisitors: 600,
+      maxCapacity: 1000,
+      trend: 'decreasing',
+      averageStayTime: '35 mins'
     },
     {
       id: 4,
       name: 'Main Entrance',
       crowd: 'high',
-      coordinates: { x: 30, y: 20 },
+      coordinates: { x: 30, y: 20, lat: 29.9600, lng: 78.1500 },
       capacity: '90%',
       waitTime: '20 mins',
       type: 'entrance',
       facilities: ['security', 'information', 'parking'],
       peakHours: ['8:00 AM', '5:00 PM'],
-      description: 'Primary entry point'
+      description: 'Primary entry point',
+      currentVisitors: 1800,
+      maxCapacity: 2000,
+      trend: 'increasing',
+      averageStayTime: '15 mins'
     },
     {
       id: 5,
       name: 'Food Court',
       crowd: 'moderate',
-      coordinates: { x: 50, y: 75 },
+      coordinates: { x: 50, y: 75, lat: 29.9540, lng: 78.1620 },
       capacity: '70%',
       waitTime: '12 mins',
       type: 'amenity',
       facilities: ['food', 'washroom', 'seating'],
       peakHours: ['12:00 PM', '7:00 PM'],
-      description: 'Dining and refreshment area'
+      description: 'Dining and refreshment area',
+      currentVisitors: 350,
+      maxCapacity: 500,
+      trend: 'increasing',
+      averageStayTime: '25 mins'
     },
     {
       id: 6,
       name: 'Parking Zone A',
       crowd: 'low',
-      coordinates: { x: 15, y: 45 },
+      coordinates: { x: 15, y: 45, lat: 29.9580, lng: 78.1480 },
       capacity: '40%',
       waitTime: '2 mins',
       type: 'parking',
       facilities: ['parking', 'shuttle'],
       peakHours: ['9:00 AM', '4:00 PM'],
-      description: 'Vehicle parking area'
+      description: 'Vehicle parking area',
+      currentVisitors: 200,
+      maxCapacity: 500,
+      trend: 'stable',
+      averageStayTime: '180 mins'
     },
     {
       id: 7,
       name: 'Medical Center',
       crowd: 'low',
-      coordinates: { x: 80, y: 65 },
+      coordinates: { x: 80, y: 65, lat: 29.9530, lng: 78.1650 },
       capacity: '30%',
       waitTime: '0 mins',
       type: 'medical',
       facilities: ['medical', 'pharmacy', 'ambulance'],
       peakHours: ['10:00 AM', '3:00 PM'],
-      description: 'Emergency medical services'
+      description: 'Emergency medical services',
+      currentVisitors: 15,
+      maxCapacity: 50,
+      trend: 'stable',
+      averageStayTime: '20 mins'
     }
   ]
+
+  // Initialize Google Maps for enhanced crowd visualization
+  useEffect(() => {
+    if (mapRef.current) {
+      if (typeof window.google === 'undefined') {
+        const script = document.createElement('script')
+        script.src = `https://maps.googleapis.com/maps/api/js?key=${API_KEY}&libraries=visualization,places`
+        script.async = true
+        script.defer = true
+        script.onload = () => {
+          setTimeout(initializeMap, 100)
+        }
+        document.head.appendChild(script)
+      } else {
+        setTimeout(initializeMap, 100)
+      }
+    }
+  }, [viewMode, filterType])
+
+  const initializeMap = () => {
+    if (mapRef.current && window.google && window.google.maps && window.google.maps.visualization) {
+      try {
+        const defaultCenter = { lat: 29.9557, lng: 78.1642 }
+
+        mapInstance.current = new window.google.maps.Map(mapRef.current, {
+          zoom: 13,
+          center: defaultCenter,
+          mapTypeId: 'roadmap',
+          disableDefaultUI: false,
+          zoomControl: true,
+          streetViewControl: false,
+          mapTypeControl: true,
+          fullscreenControl: false,
+          styles: [
+            {
+              featureType: 'poi.business',
+              elementType: 'labels',
+              stylers: [{ visibility: 'off' }]
+            }
+          ]
+        })
+
+      // Add heatmap layer
+      const heatmapData = locations.map(location => ({
+        location: new window.google.maps.LatLng(location.coordinates.lat, location.coordinates.lng),
+        weight: location.currentVisitors / 100
+      }))
+
+      const heatmap = new window.google.maps.visualization.HeatmapLayer({
+        data: heatmapData,
+        map: mapInstance.current,
+        radius: 50,
+        gradient: [
+          'rgba(0, 255, 255, 0)',
+          'rgba(0, 255, 255, 1)',
+          'rgba(0, 191, 255, 1)',
+          'rgba(0, 127, 255, 1)',
+          'rgba(0, 63, 255, 1)',
+          'rgba(0, 0, 255, 1)',
+          'rgba(0, 0, 223, 1)',
+          'rgba(0, 0, 191, 1)',
+          'rgba(0, 0, 159, 1)',
+          'rgba(0, 0, 127, 1)',
+          'rgba(63, 0, 91, 1)',
+          'rgba(127, 0, 63, 1)',
+          'rgba(191, 0, 31, 1)',
+          'rgba(255, 0, 0, 1)'
+        ]
+      })
+
+      // Add custom markers
+      locations.forEach(location => {
+        const markerColor = getCrowdColorHex(location.crowd)
+
+        const marker = new window.google.maps.Marker({
+          position: { lat: location.coordinates.lat, lng: location.coordinates.lng },
+          map: mapInstance.current,
+          title: location.name,
+          icon: {
+            url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`
+              <svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="20" cy="20" r="18" fill="${markerColor}" stroke="white" stroke-width="3"/>
+                <text x="20" y="26" text-anchor="middle" font-size="16" fill="white">${location.currentVisitors}</text>
+              </svg>
+            `)}`,
+            scaledSize: new window.google.maps.Size(40, 40)
+          }
+        })
+
+        const infoWindow = new window.google.maps.InfoWindow({
+          content: `
+            <div style="padding: 8px; max-width: 200px;">
+              <h3 style="margin: 0 0 8px 0; font-size: 16px;">${location.name}</h3>
+              <p style="margin: 0 0 4px 0; font-size: 14px;">${location.description}</p>
+              <div style="display: flex; justify-content: space-between; margin: 8px 0;">
+                <span>Visitors: <strong>${location.currentVisitors}/${location.maxCapacity}</strong></span>
+                <span>Wait: <strong>${location.waitTime}</strong></span>
+              </div>
+              <div style="margin-top: 8px;">
+                <span style="background: ${markerColor}; color: white; padding: 2px 6px; border-radius: 12px; font-size: 12px;">
+                  ${location.crowd.toUpperCase()} CROWD
+                </span>
+              </div>
+            </div>
+          `
+        })
+
+        marker.addListener('click', () => {
+          infoWindow.open(mapInstance.current, marker)
+        })
+      })
+
+      console.log('Crowd heatmap initialized successfully')
+      } catch (error) {
+        console.error('Error initializing crowd heatmap:', error)
+      }
+    } else {
+      console.log('Google Maps Visualization API not ready yet')
+    }
+  }
 
   const getCrowdColor = (crowd) => {
     switch (crowd) {
@@ -102,6 +257,19 @@ const CrowdHeatMap = ({ onNavigate }) => {
         return 'bg-red-500'
       default:
         return 'bg-gray-500'
+    }
+  }
+
+  const getCrowdColorHex = (crowd) => {
+    switch (crowd) {
+      case 'low':
+        return '#10b981'
+      case 'moderate':
+        return '#f59e0b'
+      case 'high':
+        return '#ef4444'
+      default:
+        return '#6b7280'
     }
   }
 
@@ -118,23 +286,42 @@ const CrowdHeatMap = ({ onNavigate }) => {
     }
   }
 
+  const getTrendIcon = (trend) => {
+    switch (trend) {
+      case 'increasing':
+        return '📈'
+      case 'decreasing':
+        return '📉'
+      case 'stable':
+        return '➡️'
+      default:
+        return '➡️'
+    }
+  }
+
   const getFilteredLocations = () => {
     if (filterType === 'all') return locations
     return locations.filter(loc => loc.type === filterType)
   }
 
   const predictions = [
-    { time: '2:00 PM', location: 'Har Ki Pauri', crowd: 'high', action: 'avoid' },
-    { time: '3:30 PM', location: 'Food Court', crowd: 'very-high', action: 'avoid' },
-    { time: '5:00 PM', location: 'Triveni Sangam', crowd: 'moderate', action: 'ok' },
-    { time: '6:00 PM', location: 'Ram Ghat', crowd: 'low', action: 'recommended' }
+    { time: '2:00 PM', location: 'Har Ki Pauri', crowd: 'high', action: 'avoid', confidence: 85 },
+    { time: '3:30 PM', location: 'Food Court', crowd: 'very-high', action: 'avoid', confidence: 92 },
+    { time: '5:00 PM', location: 'Triveni Sangam', crowd: 'moderate', action: 'ok', confidence: 78 },
+    { time: '6:00 PM', location: 'Ram Ghat', crowd: 'low', action: 'recommended', confidence: 90 }
   ]
 
   const liveAlerts = [
-    { type: 'warning', message: 'Heavy crowd buildup at Triveni Sangam', time: '2 mins ago' },
-    { type: 'info', message: 'New shuttle service available from Gate 2', time: '5 mins ago' },
-    { type: 'success', message: 'Parking Zone B now has 200+ free spots', time: '10 mins ago' }
+    { type: 'critical', message: 'Emergency: Medical incident at Triveni Sangam - avoid area', time: '1 min ago', urgent: true },
+    { type: 'warning', message: 'Heavy crowd buildup at Har Ki Pauri - 25+ min delays expected', time: '2 mins ago', urgent: false },
+    { type: 'info', message: 'New express shuttle service available from Parking Zone A to Ram Ghat', time: '5 mins ago', urgent: false },
+    { type: 'success', message: 'Parking Zone B now has 200+ free spots available', time: '10 mins ago', urgent: false }
   ]
+
+  const handleSetAlert = (locationName) => {
+    setAlertLocation(locationName)
+    setShowAlertModal(true)
+  }
 
   if (selectedLocation) {
     const location = locations.find(loc => loc.id === selectedLocation)
@@ -146,43 +333,86 @@ const CrowdHeatMap = ({ onNavigate }) => {
           location.crowd === 'moderate' ? 'bg-yellow-500' :
           'bg-red-500'
         }`}>
-          <div className="flex items-center space-x-3">
-            <button 
-              onClick={() => setSelectedLocation(null)}
-              className="p-1 hover:bg-white/20 rounded-full transition-colors"
-            >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" />
-              </svg>
-            </button>
-            <div>
-              <h1 className="text-xl font-bold">{location.name}</h1>
-              <p className="text-white/80 text-sm">{location.description}</p>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <button
+                onClick={() => setSelectedLocation(null)}
+                className="p-1 hover:bg-white/20 rounded-full transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+              <div>
+                <h1 className="text-xl font-bold">{location.name}</h1>
+                <p className="text-white/80 text-sm">{location.description}</p>
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="text-2xl">{getTrendIcon(location.trend)}</div>
+              <div className="text-xs text-white/80 capitalize">{location.trend}</div>
             </div>
           </div>
         </div>
 
-        <div className="p-4 pb-20">
-          {/* Crowd Status Card */}
+        <div className="p-4">
+          {/* Enhanced Crowd Status Card */}
           <div className="bg-white rounded-2xl p-6 shadow-lg mb-4">
-            <div className="text-center mb-4">
-              <div className={`w-20 h-20 rounded-full ${getCrowdColor(location.crowd)} mx-auto mb-4 flex items-center justify-center`}>
-                <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3z" />
-                </svg>
+            <div className="text-center mb-6">
+              <div className={`w-24 h-24 rounded-full ${getCrowdColor(location.crowd)} mx-auto mb-4 flex items-center justify-center relative`}>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-white">{location.currentVisitors}</div>
+                  <div className="text-xs text-white/80">visitors</div>
+                </div>
+                {location.trend === 'increasing' && (
+                  <div className="absolute -top-2 -right-2 w-8 h-8 bg-orange-500 rounded-full flex items-center justify-center">
+                    <span className="text-white text-sm">📈</span>
+                  </div>
+                )}
               </div>
               <h2 className="text-2xl font-bold text-gray-800 capitalize">{location.crowd} Crowd</h2>
-              <p className="text-gray-600">Capacity: {location.capacity}</p>
+              <div className="flex items-center justify-center space-x-2 mt-2">
+                <div className="w-32 bg-gray-200 rounded-full h-2">
+                  <div
+                    className={`h-2 rounded-full ${getCrowdColor(location.crowd)}`}
+                    style={{ width: location.capacity }}
+                  ></div>
+                </div>
+                <span className="text-sm text-gray-600">{location.capacity}</span>
+              </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 text-center">
-              <div className="bg-gray-50 rounded-xl p-3">
-                <div className="font-semibold text-gray-800">Wait Time</div>
-                <div className="text-lg font-bold text-blue-600">{location.waitTime}</div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-gray-50 rounded-xl p-4 text-center">
+                <div className="text-2xl font-bold text-blue-600">{location.waitTime}</div>
+                <div className="text-sm text-gray-600">Wait Time</div>
               </div>
-              <div className="bg-gray-50 rounded-xl p-3">
-                <div className="font-semibold text-gray-800">Capacity</div>
-                <div className="text-lg font-bold text-orange-600">{location.capacity}</div>
+              <div className="bg-gray-50 rounded-xl p-4 text-center">
+                <div className="text-2xl font-bold text-green-600">{location.averageStayTime}</div>
+                <div className="text-sm text-gray-600">Avg. Stay</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Real-time Statistics */}
+          <div className="bg-white rounded-2xl p-4 shadow-md mb-4">
+            <h3 className="font-semibold text-gray-800 mb-3">📊 Real-time Stats</h3>
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <span className="text-gray-600">Max Capacity:</span>
+                <span className="font-medium text-gray-800 ml-2">{location.maxCapacity}</span>
+              </div>
+              <div>
+                <span className="text-gray-600">Current:</span>
+                <span className="font-medium text-gray-800 ml-2">{location.currentVisitors}</span>
+              </div>
+              <div>
+                <span className="text-gray-600">Occupancy:</span>
+                <span className="font-medium text-gray-800 ml-2">{location.capacity}</span>
+              </div>
+              <div>
+                <span className="text-gray-600">Trend:</span>
+                <span className="font-medium text-gray-800 ml-2">{getTrendIcon(location.trend)} {location.trend}</span>
               </div>
             </div>
           </div>
@@ -190,13 +420,13 @@ const CrowdHeatMap = ({ onNavigate }) => {
           {/* Facilities */}
           <div className="bg-white rounded-2xl p-4 shadow-md mb-4">
             <h3 className="font-semibold text-gray-800 mb-3">Available Facilities</h3>
-            <div className="flex flex-wrap gap-2">
+            <div className="grid grid-cols-2 gap-2">
               {location.facilities.map((facility, index) => (
-                <span 
+                <span
                   key={index}
-                  className="bg-blue-100 text-blue-600 px-3 py-1 rounded-full text-sm"
+                  className="bg-blue-100 text-blue-600 px-3 py-2 rounded-lg text-sm flex items-center"
                 >
-                  {facility === 'washroom' && '🚽'} 
+                  {facility === 'washroom' && '🚽'}
                   {facility === 'water' && '💧'}
                   {facility === 'medical' && '🏥'}
                   {facility === 'parking' && '🅿️'}
@@ -207,7 +437,7 @@ const CrowdHeatMap = ({ onNavigate }) => {
                   {facility === 'shuttle' && '🚌'}
                   {facility === 'pharmacy' && '💊'}
                   {facility === 'ambulance' && '🚑'}
-                  {' ' + facility}
+                  <span className="ml-2 capitalize">{facility}</span>
                 </span>
               ))}
             </div>
@@ -215,27 +445,39 @@ const CrowdHeatMap = ({ onNavigate }) => {
 
           {/* Peak Hours */}
           <div className="bg-white rounded-2xl p-4 shadow-md mb-4">
-            <h3 className="font-semibold text-gray-800 mb-3">Peak Hours</h3>
-            <div className="flex space-x-3">
+            <h3 className="font-semibold text-gray-800 mb-3">⏰ Peak Hours</h3>
+            <div className="flex space-x-3 mb-2">
               {location.peakHours.map((hour, index) => (
-                <div key={index} className="bg-red-100 text-red-600 px-3 py-2 rounded-lg text-sm">
+                <div key={index} className="bg-red-100 text-red-600 px-3 py-2 rounded-lg text-sm font-medium">
                   {hour}
                 </div>
               ))}
             </div>
-            <p className="text-xs text-gray-600 mt-2">Avoid these times for better experience</p>
+            <p className="text-xs text-gray-600">Avoid these times for better experience</p>
           </div>
 
           {/* Actions */}
           <div className="space-y-3">
-            <button 
+            <button
               onClick={() => onNavigate('navigation')}
-              className="w-full bg-blue-500 text-white py-3 rounded-xl font-medium hover:bg-blue-600 transition-colors"
+              className="w-full bg-blue-500 text-white py-4 rounded-xl font-semibold hover:bg-blue-600 transition-colors flex items-center justify-center space-x-2"
             >
-              Get Directions
+              <span>📍</span>
+              <span>Get Smart Route</span>
             </button>
-            <button className="w-full bg-gray-100 text-gray-700 py-3 rounded-xl font-medium hover:bg-gray-200 transition-colors">
-              Set Crowd Alert
+            <button
+              onClick={() => handleSetAlert(location.name)}
+              className="w-full bg-orange-500 text-white py-4 rounded-xl font-semibold hover:bg-orange-600 transition-colors flex items-center justify-center space-x-2"
+            >
+              <span>🔔</span>
+              <span>Set Crowd Alert</span>
+            </button>
+            <button
+              onClick={() => onNavigate('washroom')}
+              className="w-full bg-green-500 text-white py-4 rounded-xl font-semibold hover:bg-green-600 transition-colors flex items-center justify-center space-x-2"
+            >
+              <span>🚽</span>
+              <span>Find Nearby Facilities</span>
             </button>
           </div>
         </div>
@@ -247,18 +489,40 @@ const CrowdHeatMap = ({ onNavigate }) => {
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <div className="bg-gradient-to-r from-blue-500 to-purple-600 text-white p-4">
-        <div className="flex items-center space-x-3">
-          <button 
-            onClick={() => onNavigate('dashboard')}
-            className="p-1 hover:bg-white/20 rounded-full transition-colors"
-          >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
-          <div>
-            <h1 className="text-xl font-bold">Crowd Heat Map</h1>
-            <p className="text-blue-100 text-sm">Real-time crowd monitoring</p>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <button
+              onClick={() => onNavigate('dashboard')}
+              className="p-1 hover:bg-white/20 rounded-full transition-colors"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            <div>
+              <h1 className="text-xl font-bold">Live Crowd Monitor</h1>
+              <p className="text-blue-100 text-sm">AI-powered crowd intelligence</p>
+            </div>
+          </div>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => setViewMode(viewMode === 'heatmap' ? 'map' : 'heatmap')}
+              className="p-2 hover:bg-white/20 rounded-full transition-colors"
+            >
+              {viewMode === 'heatmap' ? (
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 01.553-.894L9 2l6 3 6-3v13l-6 3-6-3z" />
+                </svg>
+              ) : (
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                </svg>
+              )}
+            </button>
+            <div className="text-xs text-center">
+              <div className="w-2 h-2 bg-green-400 rounded-full mx-auto animate-pulse"></div>
+              <span>Live</span>
+            </div>
           </div>
         </div>
       </div>
@@ -267,128 +531,149 @@ const CrowdHeatMap = ({ onNavigate }) => {
       <div className="bg-white border-b border-gray-200 p-4">
         <div className="flex space-x-2 overflow-x-auto mb-3">
           {[
-            { key: 'all', label: 'All Locations' },
-            { key: 'ghat', label: 'Ghats' },
-            { key: 'entrance', label: 'Entrances' },
-            { key: 'amenity', label: 'Amenities' },
-            { key: 'parking', label: 'Parking' },
-            { key: 'medical', label: 'Medical' }
+            { key: 'all', label: '🏛️ All Locations', count: locations.length },
+            { key: 'ghat', label: '🏞️ Ghats', count: locations.filter(l => l.type === 'ghat').length },
+            { key: 'entrance', label: '🚪 Entrances', count: locations.filter(l => l.type === 'entrance').length },
+            { key: 'amenity', label: '🍽️ Amenities', count: locations.filter(l => l.type === 'amenity').length },
+            { key: 'parking', label: '🅿️ Parking', count: locations.filter(l => l.type === 'parking').length },
+            { key: 'medical', label: '🏥 Medical', count: locations.filter(l => l.type === 'medical').length }
           ].map((filter) => (
             <button
               key={filter.key}
               onClick={() => setFilterType(filter.key)}
-              className={`px-3 py-2 rounded-full text-sm whitespace-nowrap transition-colors ${
+              className={`px-3 py-2 rounded-full text-sm whitespace-nowrap transition-colors flex items-center space-x-1 ${
                 filterType === filter.key
                   ? 'bg-blue-500 text-white'
                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}
             >
-              {filter.label}
+              <span>{filter.label}</span>
+              <span className={`text-xs px-1 rounded ${
+                filterType === filter.key ? 'bg-white/20' : 'bg-gray-200'
+              }`}>
+                {filter.count}
+              </span>
             </button>
           ))}
         </div>
 
-        <div className="flex items-center space-x-4 text-sm">
-          <span className="text-gray-600">Time:</span>
-          <select 
-            value={timeRange}
-            onChange={(e) => setTimeRange(e.target.value)}
-            className="bg-gray-100 text-gray-700 px-2 py-1 rounded text-sm"
-          >
-            <option value="now">Right Now</option>
-            <option value="1hour">Next Hour</option>
-            <option value="3hours">Next 3 Hours</option>
-            <option value="today">Today</option>
-          </select>
+        <div className="flex items-center justify-between text-sm">
+          <div className="flex items-center space-x-4">
+            <span className="text-gray-600">Time Range:</span>
+            <select
+              value={timeRange}
+              onChange={(e) => setTimeRange(e.target.value)}
+              className="bg-gray-100 text-gray-700 px-2 py-1 rounded text-sm"
+            >
+              <option value="now">📍 Right Now</option>
+              <option value="1hour">⏰ Next Hour</option>
+              <option value="3hours">🔮 Next 3 Hours</option>
+              <option value="today">📅 Today</option>
+            </select>
+          </div>
+          <div className="text-xs text-gray-500">
+            Last updated: {new Date().toLocaleTimeString()}
+          </div>
         </div>
       </div>
 
-      <div className="p-4 pb-20">
-        {/* Heat Map */}
-        <div className="bg-white rounded-2xl p-4 shadow-md mb-4">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold text-gray-800">Live Heat Map</h3>
-            <div className="flex items-center space-x-2 text-xs text-gray-600">
+      <div className="p-4">
+        {/* Google Maps Heatmap View */}
+        <div className="bg-white rounded-2xl p-3 shadow-md mb-4">
+          <div className="mb-2 flex items-center justify-between">
+            <h3 className="font-semibold text-gray-800">
+              {viewMode === 'map' ? '🌡️ Live Crowd Heatmap' : '🗺️ Interactive Heat Map'}
+            </h3>
+            <div className="flex items-center space-x-3 text-xs text-gray-600">
               <div className="flex items-center space-x-1">
-                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                <div className="w-3 h-3 bg-green-500 rounded-full"></div>
                 <span>Low</span>
               </div>
               <div className="flex items-center space-x-1">
-                <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
+                <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
                 <span>Moderate</span>
               </div>
               <div className="flex items-center space-x-1">
-                <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+                <div className="w-3 h-3 bg-red-500 rounded-full"></div>
                 <span>High</span>
               </div>
             </div>
           </div>
-
-          {/* Simplified Heat Map Visualization */}
-          <div className="relative bg-gray-100 rounded-2xl h-64 overflow-hidden">
-            {/* Background river/path lines */}
-            <svg className="absolute inset-0 w-full h-full opacity-30" viewBox="0 0 100 100" preserveAspectRatio="none">
-              <path d="M10,20 Q50,30 90,25" stroke="#93c5fd" strokeWidth="3" fill="none" />
-              <path d="M15,60 Q45,65 85,55" stroke="#93c5fd" strokeWidth="2" fill="none" />
-              <path d="M20,40 L80,45" stroke="#d1d5db" strokeWidth="1" fill="none" />
-            </svg>
-
-            {/* Location markers */}
-            {getFilteredLocations().map((location) => (
-              <button
-                key={location.id}
-                onClick={() => setSelectedLocation(location.id)}
-                className={`absolute rounded-full ${getCrowdColor(location.crowd)} ${getCrowdSize(location.crowd)} 
-                  animate-pulse hover:scale-150 transition-all duration-200 border-2 border-white shadow-lg`}
-                style={{ 
-                  left: `${location.coordinates.x}%`, 
-                  top: `${location.coordinates.y}%`,
-                  transform: 'translate(-50%, -50%)'
-                }}
-                title={location.name}
-              />
-            ))}
-
-            {/* Location labels */}
-            {getFilteredLocations().map((location) => (
-              <div
-                key={`label-${location.id}`}
-                className="absolute text-xs font-medium text-gray-700 bg-white/80 px-2 py-1 rounded-lg shadow-sm pointer-events-none"
-                style={{ 
-                  left: `${location.coordinates.x}%`, 
-                  top: `${location.coordinates.y + 8}%`,
-                  transform: 'translate(-50%, 0)'
-                }}
-              >
-                {location.name}
+          <div
+            ref={mapRef}
+            className="w-full h-96 rounded-xl border border-gray-200"
+            style={{
+              minHeight: '384px',
+              backgroundColor: '#f3f4f6'
+            }}
+          >
+            {!window.google && (
+              <div className="flex items-center justify-center h-full bg-gray-100 rounded-xl">
+                <div className="text-center">
+                  <div className="w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
+                  <p className="text-sm text-gray-600">Loading Google Maps...</p>
+                  <p className="text-xs text-gray-500 mt-1">Please wait while we load the crowd data</p>
+                </div>
               </div>
-            ))}
+            )}
+          </div>
+          <div className="flex items-center justify-between p-2 text-sm text-gray-600 mt-2">
+            <span className="flex items-center space-x-2">
+              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+              <span>Real-time crowd density</span>
+            </span>
+            <div className="flex items-center space-x-4">
+              <span className="flex items-center space-x-1">
+                <span className="text-2xl">🌡️</span>
+                <span className="text-xs">Heat zones</span>
+              </span>
+              <span className="flex items-center space-x-1">
+                <span className="text-lg">📍</span>
+                <span className="text-xs">{locations.length} locations</span>
+              </span>
+            </div>
           </div>
         </div>
 
-        {/* Live Alerts */}
+
+        {/* Critical Alerts */}
+        <div className="space-y-2 mb-4">
+          {liveAlerts.filter(alert => alert.urgent).map((alert, index) => (
+            <div key={index} className="bg-red-500 text-white p-4 rounded-2xl animate-pulse">
+              <div className="flex items-center space-x-2">
+                <span className="text-2xl">🚨</span>
+                <div className="flex-1">
+                  <p className="font-bold text-sm">{alert.message}</p>
+                  <p className="text-red-100 text-xs">{alert.time}</p>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Enhanced Live Alerts */}
         <div className="bg-white rounded-2xl p-4 shadow-md mb-4">
-          <h3 className="font-semibold text-gray-800 mb-3">Live Alerts</h3>
-          <div className="space-y-2">
-            {liveAlerts.map((alert, index) => (
-              <div key={index} className={`p-3 rounded-lg ${
-                alert.type === 'warning' ? 'bg-red-50 text-red-700' :
-                alert.type === 'info' ? 'bg-blue-50 text-blue-700' :
-                'bg-green-50 text-green-700'
+          <h3 className="font-semibold text-gray-800 mb-3">📢 Live Alerts & Updates</h3>
+          <div className="space-y-3">
+            {liveAlerts.filter(alert => !alert.urgent).map((alert, index) => (
+              <div key={index} className={`p-4 rounded-xl border-l-4 ${
+                alert.type === 'warning' ? 'bg-orange-50 border-orange-500 text-orange-800' :
+                alert.type === 'info' ? 'bg-blue-50 border-blue-500 text-blue-800' :
+                'bg-green-50 border-green-500 text-green-800'
               }`}>
-                <div className="flex items-start space-x-2">
-                  <div className={`rounded-full p-1 ${
-                    alert.type === 'warning' ? 'bg-red-200' :
-                    alert.type === 'info' ? 'bg-blue-200' :
-                    'bg-green-200'
+                <div className="flex items-start space-x-3">
+                  <div className={`rounded-full p-2 ${
+                    alert.type === 'warning' ? 'bg-orange-100' :
+                    alert.type === 'info' ? 'bg-blue-100' :
+                    'bg-green-100'
                   }`}>
                     {alert.type === 'warning' && '⚠️'}
                     {alert.type === 'info' && 'ℹ️'}
                     {alert.type === 'success' && '✅'}
                   </div>
                   <div className="flex-1">
-                    <p className="text-sm font-medium">{alert.message}</p>
-                    <p className="text-xs opacity-70">{alert.time}</p>
+                    <p className="font-medium text-sm">{alert.message}</p>
+                    <p className="text-xs opacity-80 mt-1">{alert.time}</p>
                   </div>
                 </div>
               </div>
@@ -396,29 +681,44 @@ const CrowdHeatMap = ({ onNavigate }) => {
           </div>
         </div>
 
-        {/* Predictions */}
+        {/* AI Predictions */}
         <div className="bg-white rounded-2xl p-4 shadow-md">
-          <h3 className="font-semibold text-gray-800 mb-3">Crowd Predictions</h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-gray-800">🔮 AI Crowd Predictions</h3>
+            <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">Powered by ML</span>
+          </div>
           <div className="space-y-3">
             {predictions.map((prediction, index) => (
-              <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                <div>
-                  <p className="font-medium text-gray-800">{prediction.location}</p>
-                  <p className="text-sm text-gray-600">{prediction.time}</p>
+              <div key={index} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors">
+                <div className="flex items-center space-x-3">
+                  <div className="text-2xl">
+                    {prediction.action === 'recommended' ? '🟢' :
+                     prediction.action === 'ok' ? '🟡' : '🔴'}
+                  </div>
+                  <div>
+                    <p className="font-semibold text-gray-800">{prediction.location}</p>
+                    <p className="text-sm text-gray-600">{prediction.time}</p>
+                  </div>
                 </div>
                 <div className="text-right">
-                  <span className={`text-sm px-2 py-1 rounded-full ${
-                    prediction.action === 'recommended' ? 'bg-green-100 text-green-600' :
-                    prediction.action === 'ok' ? 'bg-yellow-100 text-yellow-600' :
-                    'bg-red-100 text-red-600'
-                  }`}>
-                    {prediction.crowd}
-                  </span>
-                  <p className="text-xs text-gray-500 mt-1">
-                    {prediction.action === 'recommended' ? '👍 Good time' :
-                     prediction.action === 'ok' ? '⚠️ Moderate' :
-                     '❌ Avoid'}
-                  </p>
+                  <div className="flex items-center space-x-2">
+                    <span className={`text-sm font-medium px-3 py-1 rounded-full ${
+                      prediction.action === 'recommended' ? 'bg-green-100 text-green-700' :
+                      prediction.action === 'ok' ? 'bg-yellow-100 text-yellow-700' :
+                      'bg-red-100 text-red-700'
+                    }`}>
+                      {prediction.crowd}
+                    </span>
+                  </div>
+                  <div className="flex items-center space-x-1 mt-1">
+                    <span className="text-xs text-gray-500">{prediction.confidence}% confidence</span>
+                    <div className="w-8 bg-gray-200 rounded-full h-1">
+                      <div
+                        className="bg-blue-500 h-1 rounded-full"
+                        style={{ width: `${prediction.confidence}%` }}
+                      ></div>
+                    </div>
+                  </div>
                 </div>
               </div>
             ))}
@@ -426,35 +726,51 @@ const CrowdHeatMap = ({ onNavigate }) => {
         </div>
       </div>
 
-      {/* Bottom Navigation */}
-      <div className="fixed bottom-0 left-0 w-full bg-white border-t border-gray-200 z-40">
-        <div className="flex justify-around py-2">
-          <button onClick={() => onNavigate('dashboard')} className="flex flex-col items-center py-2 px-4 text-gray-400">
-            <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M10.707 2.293a1 1 0 00-1.414 0l-9 9a1 1 0 001.414 1.414L2 12.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-4.586l.293.293a1 1 0 001.414-1.414l-7-7z" />
-            </svg>
-            <span className="text-xs mt-1">Home</span>
-          </button>
-          <button className="flex flex-col items-center py-2 px-4 text-blue-500">
-            <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M12 1.586l-4 4v12.828l4-4V1.586zM3.707 3.293A1 1 0 002 4v10a1 1 0 00.293.707L6 18.414V5.586L3.707 3.293zM17.707 5.293L14 1.586v12.828l2.293 2.293A1 1 0 0018 16V6a1 1 0 00-.293-.707z" clipRule="evenodd" />
-            </svg>
-            <span className="text-xs mt-1">Map</span>
-          </button>
-          <button onClick={() => onNavigate('events')} className="flex flex-col items-center py-2 px-4 text-gray-400">
-            <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" />
-            </svg>
-            <span className="text-xs mt-1">Events</span>
-          </button>
-          <button onClick={() => onNavigate('ecopoints')} className="flex flex-col items-center py-2 px-4 text-gray-400">
-            <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-            </svg>
-            <span className="text-xs mt-1">Points</span>
-          </button>
+      {/* Alert Modal */}
+      {showAlertModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full">
+            <h3 className="text-lg font-bold text-gray-800 mb-2">Set Crowd Alert</h3>
+            <p className="text-gray-600 text-sm mb-4">
+              Get notified when crowd levels change at {alertLocation}
+            </p>
+
+            <div className="space-y-3 mb-6">
+              <label className="flex items-center space-x-3">
+                <input type="checkbox" className="w-4 h-4 text-orange-500" defaultChecked />
+                <span className="text-sm">When crowd becomes LOW 🟢</span>
+              </label>
+              <label className="flex items-center space-x-3">
+                <input type="checkbox" className="w-4 h-4 text-orange-500" />
+                <span className="text-sm">When crowd becomes HIGH 🔴</span>
+              </label>
+              <label className="flex items-center space-x-3">
+                <input type="checkbox" className="w-4 h-4 text-orange-500" />
+                <span className="text-sm">30 minutes before peak hours ⏰</span>
+              </label>
+            </div>
+
+            <div className="flex space-x-3">
+              <button
+                onClick={() => setShowAlertModal(false)}
+                className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-lg font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  setShowAlertModal(false)
+                  // Mock alert setup
+                }}
+                className="flex-1 bg-orange-500 text-white py-3 rounded-lg font-medium"
+              >
+                Set Alert
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
+
     </div>
   )
 }
